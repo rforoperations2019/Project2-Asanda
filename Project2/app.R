@@ -36,6 +36,7 @@ ui <-dashboardPage(
                          ,leafletOutput("map",width="100%",height="400px")
                          )
                 ,tabPanel("Plot 1"
+                          , fluidRow(plotlyOutput("plot1") %>% withSpinner(color="#0dc5c1"))
                           , fluidRow(checkboxInput(inputId = "show_data1"
                                                    ,label = "Show data table"
                                                    ,value = TRUE))
@@ -46,6 +47,7 @@ ui <-dashboardPage(
                                     )
                           )
                 ,tabPanel("Plot 2"
+                          , fluidRow(plotlyOutput("plot2") %>% withSpinner(color="#0dc5c1"))
                           , fluidRow(checkboxInput(inputId = "show_data2"
                                                    ,label = "Show data table"
                                                    ,value = TRUE))
@@ -112,10 +114,28 @@ server <- function(input, output, session) {
         }
     })
     
+    # Create scatterplot object for energy usage 
+    output$plot1 <- renderPlotly({
+        ggplotly(
+            ggplot(data = mtcars, aes_string(x = mtcars$wt, y = mtcars$mpg, color = mtcars$carb))
+            +geom_point()
+            +theme(axis.text.x = element_text(angle = 90))
+        )
+    })
+    
+    # Create scatterplot object for energy usage 
+    output$plot2 <- renderPlotly({
+        ggplotly(
+            ggplot(data = mtcars, aes_string(x = mtcars$wt, y = mtcars$mpg, color = mtcars$carb))
+            +geom_point()
+            +theme(axis.text.x = element_text(angle = 90))
+        )
+    })
+    
     # Print data table 1 if checked -------------------------------------
     output$dataTable1 <- DT::renderDataTable(
         if(input$show_data1){
-            DT::datatable(data = quakes
+            DT::datatable(data = mtcars
                           # Enable Buttons --------------------------------
                           ,extensions = 'Buttons'
                           ,options = list(pageLength = 10,
@@ -147,7 +167,7 @@ server <- function(input, output, session) {
     # Print data table 2 if checked -------------------------------------
     output$dataTable2 <- DT::renderDataTable(
         if(input$show_data2){
-            DT::datatable(data = quakes
+            DT::datatable(data = mtcars
                           # Enable Buttons --------------------------------
                           ,extensions = 'Buttons'
                           ,options = list(pageLength = 10,
