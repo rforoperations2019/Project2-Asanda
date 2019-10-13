@@ -29,7 +29,34 @@ ui <-dashboardPage(
             )
         )
     ,dashboardBody(
-        fluidPage(leafletOutput("map"))
+        #fluidPage(leafletOutput("map"))
+        mainPanel(
+            tabsetPanel(
+                tabPanel("Earthquakes"
+                         ,leafletOutput("map",width="100%",height="400px")
+                         )
+                ,tabPanel("Plot 1"
+                          , fluidRow(checkboxInput(inputId = "show_data1"
+                                                   ,label = "Show data table"
+                                                   ,value = TRUE))
+                          ,fluidRow(div(style = 'overflow-x: scroll'
+                                        # Show data table ---------------------------------------------
+                                        ,DT::dataTableOutput(outputId = "dataTable1") %>% withSpinner(color="#0dc5c1")
+                                        )
+                                    )
+                          )
+                ,tabPanel("Plot 2"
+                          , fluidRow(checkboxInput(inputId = "show_data2"
+                                                   ,label = "Show data table"
+                                                   ,value = TRUE))
+                          ,fluidRow(div(style = 'overflow-x: scroll'
+                                        # Show data table ---------------------------------------------
+                                        ,DT::dataTableOutput(outputId = "dataTable2") %>% withSpinner(color="#0dc5c1")
+                          )
+                          )
+                )
+                )
+            )
         )
     )
 
@@ -84,6 +111,70 @@ server <- function(input, output, session) {
             )
         }
     })
+    
+    # Print data table 1 if checked -------------------------------------
+    output$dataTable1 <- DT::renderDataTable(
+        if(input$show_data1){
+            DT::datatable(data = quakes
+                          # Enable Buttons --------------------------------
+                          ,extensions = 'Buttons'
+                          ,options = list(pageLength = 10,
+                                          # Turn off search ----------------
+                                          dom = "Btp",
+                                          # Buttons available --------------
+                                          buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+                          )
+                          ,rownames = FALSE
+            )  %>% 
+                
+                # Format text example ---------------------------------------
+            formatStyle(
+                columns = 5, 
+                valueColumns = 5, 
+                color = styleEqual(c("R","G", "PG", "PG-13"), c("red", "green", "blue", "yellow"))
+            ) %>%
+                
+                # Format background example ---------------------------------
+            formatStyle(
+                columns = 8,
+                #background = styleColorBar(range(CEnergy), '#cab2d6'),
+                backgroundSize = '90% 85%',
+                backgroundRepeat = 'no-repeat',
+                backgroundPosition = 'center')
+        }
+    )
+    
+    # Print data table 2 if checked -------------------------------------
+    output$dataTable2 <- DT::renderDataTable(
+        if(input$show_data2){
+            DT::datatable(data = quakes
+                          # Enable Buttons --------------------------------
+                          ,extensions = 'Buttons'
+                          ,options = list(pageLength = 10,
+                                          # Turn off search ----------------
+                                          dom = "Btp",
+                                          # Buttons available --------------
+                                          buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+                          )
+                          ,rownames = FALSE
+            )  %>% 
+                
+                # Format text example ---------------------------------------
+            formatStyle(
+                columns = 5, 
+                valueColumns = 5, 
+                color = styleEqual(c("R","G", "PG", "PG-13"), c("red", "green", "blue", "yellow"))
+            ) %>%
+                
+                # Format background example ---------------------------------
+            formatStyle(
+                columns = 8,
+                #background = styleColorBar(range(CEnergy), '#cab2d6'),
+                backgroundSize = '90% 85%',
+                backgroundRepeat = 'no-repeat',
+                backgroundPosition = 'center')
+        }
+    )
 }
 
 shinyApp(ui, server)
