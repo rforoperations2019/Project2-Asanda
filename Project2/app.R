@@ -14,6 +14,10 @@ library(ECharts2Shiny)
 library(shinyalert)
 library(shinycssloaders)
 library(shinyWidgets)
+library(rgeos)
+library(rgdal)
+library(sp)
+library(leaflet.extras)
 
 
 ui <-dashboardPage(
@@ -23,7 +27,7 @@ ui <-dashboardPage(
     ,dashboardSidebar(
         # Create sidebar menu with menu items, Filtering options, and submission button
         sidebarMenu(
-            sliderInput("range", "Magnitudes", min(quakes$mag), max(quakes$mag),value = range(quakes$mag), step = 0.1)
+            selectInput(inputId = "lanetype",label =  "Bike Lane Type", choices = levels(data$TYPE),selected = "Conventional" ,multiple = F)
             ,selectInput("colors", "Color Scheme", rownames(subset(brewer.pal.info, category %in% c("seq", "div"))))
             ,checkboxInput("legend", "Show legend", TRUE)
             )
@@ -64,15 +68,19 @@ ui <-dashboardPage(
 
 server <- function(input, output, session) {
     
+    bikes <- readOGR("http://data.phl.opendata.arcgis.com/datasets/b5f660b9f0f44ced915995b6d49f6385_0.geojson")
+    bikepalette <- colorFactor(palette() , levels = levels(bikes$TYPE))
+    
     # Reactive expression for the data subsetted to what the user selected
     filteredData <- reactive({
-        quakes[quakes$mag >= input$range[1] & quakes$mag <= input$range[2],]
+        #quakes[quakes$mag >= input$range[1] & quakes$mag <= input$range[2],]
+        subset(x = bikes, TYPE %in% input$lanetype)
     })
     
     # This reactive expression represents the palette function,
     # which changes as the user makes selections in UI.
     colorpal <- reactive({
-        colorNumeric(input$colors, quakes$mag)
+        colorNumeric(input$colors, bikes$TYPE)
     })
     
     
@@ -80,39 +88,45 @@ server <- function(input, output, session) {
         # Use leaflet() here, and only include aspects of the map that
         # won't need to change dynamically (at least, not unless the
         # entire map is being torn down and recreated).
-        leaflet(quakes) %>% 
-            addTiles() %>%
-            fitBounds(~min(long), ~min(lat), ~max(long), ~max(lat))
+        leaflet() %>% 
+            addProviderTiles("Esri.WorldStreetMap", group = "Street") %>%
+            addProviderTiles(providers$Stamen.Terrain, group = 'Terrain') %>%
+            addLayersControl(baseGroups = c("Street", "Terrain") 
+                              ,overlayGroups = c("Bike Lanes", "Districts", "Facilities")
+                              ,options = layersControlOptions(collapsed = FALSE)) #%>%
+            # addPolylines(data = bikes,color = ~bikepalette(TYPE), group = "Bike Lanes", weight = 3) %>%
+            # addLegend(position = "topright" , pal = bikepalette, values = bikes$TYPE, title = "Lane Type", group = "Bike Lanes")
+            #fitBounds(~min(long), ~min(lat), ~max(long), ~max(lat))
     })
     
     # Incremental changes to the map (in this case, replacing the
     # circles when a new color is chosen) should be performed in
     # an observer. Each independent set of things that can change
     # should be managed in its own observer.
-    observe({
-        pal <- colorpal()
-        
-        leafletProxy("map", data = filteredData()) %>%
-            clearShapes() %>%
-            addCircles(radius = ~10^mag/10, weight = 1, color = "#777777",
-                       fillColor = ~pal(mag), fillOpacity = 0.7, popup = ~paste(mag)
-            )
-    })
-    
-    # Use a separate observer to recreate the legend as needed.
-    observe({
-        proxy <- leafletProxy("map", data = quakes)
-        
-        # Remove any existing legend, and only if the legend is
-        # enabled, create a new one.
-        proxy %>% clearControls()
-        if (input$legend) {
-            pal <- colorpal()
-            proxy %>% addLegend(position = "bottomright",
-                                pal = pal, values = ~mag
-            )
-        }
-    })
+    # observe({
+    #     pal <- colorpal()
+    #     
+    #     leafletProxy("map", data = filteredData()) %>%
+    #         clearShapes() #%>%
+    #         # addCircles(radius = ~10^mag/10, weight = 1, color = "#777777",
+    #         #            fillColor = ~pal(mag), fillOpacity = 0.7, popup = ~paste(mag)
+    #         # )
+    # })
+    # 
+    # # Use a separate observer to recreate the legend as needed.
+    # observe({
+    #     proxy <- leafletProxy("map", data = data)
+    #     
+    #     # Remove any existing legend, and only if the legend is
+    #     # enabled, create a new one.
+    #     proxy %>% clearControls()
+    #     if (input$legend) {
+    #         pal <- colorpal()
+    #         proxy %>% addLegend(position = "bottomright",
+    #                             pal = pal, values = ~mag
+    #         )
+    #     }
+    # })
     
     # Create scatterplot object for energy usage 
     output$plot1 <- renderPlotly({
