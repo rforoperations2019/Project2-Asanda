@@ -26,28 +26,28 @@ ui <-dashboardPage(
     ## Sidebar content
     #arealist <- append(arealist, "All", after =  0)
     ,dashboardSidebar(
-        # Create sidebar menu with menu items, Filtering options, and submission button
+        # Create sidebar menu with menu items, Filtering options, legend display, and submission button
         sidebarMenu(
-            selectInput(inputId = "lanetype",label =  "Bike Lane Type", choices = append(levels(bikes$TYPE), "All", after = 0),selected = "All" ,multiple = T)
-            , selectInput(inputId = "assettype",label =  "Facility Asset Type", choices = append(levels(facilities$ASSET_TYPE), "All", after = 0),selected = "All" ,multiple = T)
+            selectInput(inputId = "lanetype",label =  "Bike Lane Type", choices = levels(bikes$TYPE), selected = "Conventional" ,multiple = T)
+            , selectInput(inputId = "assettype",label =  "Facility Asset Type", choices = levels(facilities$ASSET_TYPE), selected = "Building" ,multiple = T)
             ,selectInput("colors", "Color Scheme", rownames(subset(brewer.pal.info, category %in% c("seq", "div"))))
             ,actionButton("submit", label = "Submit")
             ,checkboxInput("legend", "Show legend", TRUE)
             )
         )
     ,dashboardBody(
-        #fluidPage(leafletOutput("map"))
         mainPanel(
             tabsetPanel(
                 tabPanel("Map of Philadelphia Public Resources"
                          ,leafletOutput("map",width="200%",height="400px")
                          )
                 ,tabPanel("Bikes"
-                          , fluidRow(plotlyOutput("plot1") %>% withSpinner(color="#0dc5c1"))
-                          , fluidRow(checkboxInput(inputId = "show_data1"
+                          ,fluidRow(plotlyOutput("plot1") %>% withSpinner(color="#0dc5c1"))
+                          ,fluidRow(checkboxInput(inputId = "show_data1"
                                                    ,label = "Show data table"
                                                    ,value = TRUE))
-                          ,fluidRow(div(style = 'overflow-x: scroll'
+                          ,fluidRow(
+                              div(style = 'overflow-x: scroll'
                                         # Show data table ---------------------------------------------
                                         ,DT::dataTableOutput(outputId = "dataTable1") %>% withSpinner(color="#0dc5c1")
                                         )
@@ -123,7 +123,7 @@ server <- function(input, output, session) {
         
         req(input$assettype)
         # Boros
-        filtfac <- subset(facilities_data, ASSET_TYPE == input$assettype)
+        filtfac <- subset(facilities_data, ASSET_TYPE %in% input$assettype)
         
         # Sewer type
         if (length(input$assettype) > 0) {
@@ -133,67 +133,67 @@ server <- function(input, output, session) {
         return(filtfac)
     })
     
+    View(class(filteredFacilities()))
+    
     # This reactive expression represents the palette function,
     # which changes as the user makes selections in UI.
-    # colorpal <- reactive({
-    #     colorNumeric(input$colors, bikes$TYPE)
-    # })
+    colorpal <- reactive({
+        colorNumeric(input$colors, bikes$TYPE)
+    })
     
     
     output$map <- renderLeaflet({
-        # Use leaflet() here, and only include aspects of the map that
-        # won't need to change dynamically (at least, not unless the
-        # entire map is being torn down and recreated).
+# Use leaflet() here, and only include aspects of the map that won't need to change dynamically (at least, not unless the entire map is being torn down and recreated).
         leaflet() %>% 
+            setView(-75.1652, 39.9526, 9) %>%
             addProviderTiles("Esri.WorldStreetMap", group = "Street") %>%
             addProviderTiles(providers$Stamen.Terrain, group = 'Terrain') %>%
             addLayersControl(baseGroups = c("Street", "Terrain") 
-                              ,overlayGroups = c("Bike Lanes", "Districts", "Facilities")
+                              ,overlayGroups = c("Bike Lanes", "Facilities")
                               ,options = layersControlOptions(collapsed = FALSE)) #%>%
             # addPolylines(data = filteredBikes(),color = ~colorpal()(TYPE), group = "Bike Lanes", weight = 3) %>%
             # addLegend(position = "topright" , pal = colorpal(), values = bikes$TYPE, title = "Lane Type", group = "Bike Lanes)
             #fitBounds(~min(long), ~min(lat), ~max(long), ~max(lat))
     })
     
-    # Incremental changes to the map (in this case, replacing the
-    # circles when a new color is chosen) should be performed in
-    # an observer. Each independent set of things that can change
-    # should be managed in its own observer.
+    # Incremental changes to the map (in this case, replacing the lines when a new bike lane type is chosen).
+    
+    observeEvent(input$submit,{
+        bikesfiltered <- filteredBikes()
+        bikepalette <- colorFactor(palette() , levels = levels(bikesfiltered$TYPE))
+
+        leafletProxy("map", data = bikesfiltered) %>%
+            clearGroup(group = "Bike Lanes") %>%
+            addPolylines(data = bikesfiltered,  color = ~bikepalette(TYPE), group = "Bike Lanes")
+    })
+    
+    # # Replace layer with filtered philly publuc facilities
     # observeEvent(input$submit,{
-    #     bikesfiltered <- filteredBikes()
-    #     bikepalette <- colorFactor(palette() , levels = levels(bikesfiltered$TYPE))
-    # 
-    #     leafletProxy("map", data = bikesfiltered) %>%
-    #         clearGroup(group = "Bike Lanes") %>%
-    #         addPolylines(data = bikesfiltered, color = ~bikepalette(TYPE), group = "Bike Lanes")
+    #     facilitiesFiltered <- filteredFacilities()
+    #     # Data is filtered facilities
+    #     leafletProxy("map", data = facilitiesFiltered@data) %>%
+    #         clearGroup(group = "Facilities") %>%
+    #         addMarkers(clusterOptions = markerClusterOptions(), data = facilitiesFiltered@data, group = "Facilities", label = facilities$ASSET_NAME)
     # })
     
-    # Replace layer with filtered greenInfrastructure
-    observeEvent(input$submit,{
-        facilitiesFiltered <- filteredFacilities()
-        # Data is filtered facilities
-        leafletProxy("map", data = facilitiesFiltered@data) %>%
-            clearGroup(group = "Facilities") %>%
-            addMarkers(clusterOptions = markerClusterOptions(), data = facilitiesFiltered@data, group = "Facilities", label = facilities$ASSET_NAME)
-    })
+    # # Use a separate observer to recreate the bike lane legend as needed.
+    # observeEvent(input$submit,{
+    #     proxy <- leafletProxy("map", data = bikesfiltered())
     # 
-    
-    # # Use a separate observer to recreate the legend as needed.
-    # observe({
-    #     proxy <- leafletProxy("map", data = data)
-    #     
     #     # Remove any existing legend, and only if the legend is
     #     # enabled, create a new one.
-    #     proxy %>% clearControls()
+    #     proxy %>% 
+    #         clearControls()
     #     if (input$legend) {
     #         pal <- colorpal()
-    #         proxy %>% addLegend(position = "bottomright",
-    #                             pal = pal, values = ~mag
+    #         proxy %>% 
+    #             addLegend(position = "bottomright",
+    #                             pal = pal, values = ~TYPE
     #         )
     #     }
     # })
     
-    # Create scatterplot object for energy usage 
+    # Create histogram object for Bike lane type count 
     output$plot1 <- renderPlotly({
         ggplotly(
             ggplot(data = filteredBikes(), aes(TYPE))+
@@ -205,7 +205,7 @@ server <- function(input, output, session) {
         )
     })
     
-    # Create scatterplot object for energy usage 
+    # Create histogram object for facilities asset grouping 
     output$plot2 <- renderPlotly({
         ggplotly(
             ggplot(data = filteredFacilities()@data, aes(ASSET_GROUP1))+
@@ -217,7 +217,7 @@ server <- function(input, output, session) {
         )
     })
     
-    # Print data table 1 if checked -------------------------------------
+    # Print bikes data table if checked -------------------------------------
     output$dataTable1 <- DT::renderDataTable(
         if(input$show_data1){
             DT::datatable(data = bikes@data
@@ -242,14 +242,14 @@ server <- function(input, output, session) {
                 # Format background example ---------------------------------
             formatStyle(
                 columns = 8,
-                #background = styleColorBar(range(CEnergy), '#cab2d6'),
+                #background = styleColorBar(range(bikes@data), '#cab2d6'),
                 backgroundSize = '90% 85%',
                 backgroundRepeat = 'no-repeat',
                 backgroundPosition = 'center')
         }
     )
     
-    # Print data table 2 if checked -------------------------------------
+    # Print Facilities data table if checked -------------------------------------
     output$dataTable2 <- DT::renderDataTable(
         if(input$show_data2){
             DT::datatable(data = facilities@data
@@ -274,7 +274,7 @@ server <- function(input, output, session) {
                 # Format background example ---------------------------------
             formatStyle(
                 columns = 8,
-                #background = styleColorBar(range(CEnergy), '#cab2d6'),
+                #background = styleColorBar(range(facilities@data), '#cab2d6'),
                 backgroundSize = '90% 85%',
                 backgroundRepeat = 'no-repeat',
                 backgroundPosition = 'center')
