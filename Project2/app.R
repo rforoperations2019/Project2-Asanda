@@ -28,8 +28,8 @@ ui <-dashboardPage(
     ,dashboardSidebar(
         # Create sidebar menu with menu items, Filtering options, and submission button
         sidebarMenu(
-            selectInput(inputId = "lanetype",label =  "Bike Lane Type", choices = append(levels(bikes$TYPE), "All", after = 0),selected = "All" ,multiple = F)
-            , selectInput(inputId = "assettype",label =  "Facility Asset Type", choices = append(levels(facilities$ASSET_TYPE), "All", after = 0),selected = "All" ,multiple = F)
+            selectInput(inputId = "lanetype",label =  "Bike Lane Type", choices = append(levels(bikes$TYPE), "All", after = 0),selected = "All" ,multiple = T)
+            , selectInput(inputId = "assettype",label =  "Facility Asset Type", choices = append(levels(facilities$ASSET_TYPE), "All", after = 0),selected = "All" ,multiple = T)
             ,selectInput("colors", "Color Scheme", rownames(subset(brewer.pal.info, category %in% c("seq", "div"))))
             ,actionButton("submit", label = "Submit")
             ,checkboxInput("legend", "Show legend", TRUE)
