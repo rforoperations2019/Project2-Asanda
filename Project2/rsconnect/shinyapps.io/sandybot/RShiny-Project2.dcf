@@ -1,0 +1,12 @@
+name: RShiny-Project2
+title: RShiny-Project2
+username:
+account: sandybot
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 1350349
+bundleId: 2512829
+url: https://sandybot.shinyapps.io/RShiny-Project2/
+when: 1571433638.05283
+asMultiple: FALSE
+asStatic: FALSE
