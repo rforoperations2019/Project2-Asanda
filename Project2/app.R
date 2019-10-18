@@ -91,7 +91,7 @@ ui <-dashboardPage(
 server <- function(input, output, session) {
     
     
-    # bike lanes filtered data
+    #Reactive expression for bike lanes filtered data
     filteredBikes <- reactive({
         filtlane <- bikes
         
