@@ -20,6 +20,13 @@ library(sp)
 library(leaflet.extras)
 
 
+
+bikes <- readOGR("http://data.phl.opendata.arcgis.com/datasets/b5f660b9f0f44ced915995b6d49f6385_0.geojson")
+#bikepalette <- colorFactor(palette() , levels = levels(bikes$TYPE))
+
+facilities <- readOGR("http://data.phl.opendata.arcgis.com/datasets/b3c133c3b15d4c96bcd4d5cc09f19f4e_0.geojson")
+
+
 ui <-dashboardPage(
     #fluidPage(useShinyalert())
     dashboardHeader(title = "Leaflet Crawler")
@@ -32,14 +39,21 @@ ui <-dashboardPage(
             , selectInput(inputId = "assettype",label =  "Facility Asset Type", choices = levels(facilities$ASSET_TYPE), selected = "Building" ,multiple = T)
             ,selectInput("colors", "Color Scheme", rownames(subset(brewer.pal.info, category %in% c("seq", "div"))))
             ,actionButton("submit", label = "Submit")
+            # Button
+            ,downloadButton("downloadBikes", "Download Bikes Data")
+            ,br()
+            ,downloadButton("downloadFacilities", "Download Facilites Data")
             ,checkboxInput("legend", "Show legend", TRUE)
             )
         )
-    ,dashboardBody(
+    ,dashboardBody( #width = 400, height = 400, 
         mainPanel(
             tabsetPanel(
                 tabPanel("Map of Philadelphia Public Resources"
-                         ,leafletOutput("map",width="200%",height="400px")
+                         ,leafletOutput("map"
+                                        ,width="100%"
+                                        #,height="350px"
+                                        )
                          )
                 ,tabPanel("Bikes"
                           ,fluidRow(plotlyOutput("plot1") %>% withSpinner(color="#0dc5c1"))
@@ -47,10 +61,10 @@ ui <-dashboardPage(
                                                    ,label = "Show data table"
                                                    ,value = TRUE))
                           ,fluidRow(
-                              div(style = 'overflow-x: scroll'
+                              #div(style = 'overflow-x: scroll'
                                         # Show data table ---------------------------------------------
-                                        ,DT::dataTableOutput(outputId = "dataTable1") %>% withSpinner(color="#0dc5c1")
-                                        )
+                                        box(width = 12, DT::dataTableOutput(outputId = "dataTable1") %>% withSpinner(color="#0dc5c1"))
+                                        #)
                                     )
                           )
                 ,tabPanel("Facilities"
@@ -58,10 +72,10 @@ ui <-dashboardPage(
                           , fluidRow(checkboxInput(inputId = "show_data2"
                                                    ,label = "Show data table"
                                                    ,value = TRUE))
-                          ,fluidRow(div(style = 'overflow-x: scroll'
+                          ,fluidRow(#div(style = 'overflow-x: scroll'
                                         # Show data table ---------------------------------------------
-                                        ,DT::dataTableOutput(outputId = "dataTable2") %>% withSpinner(color="#0dc5c1")
-                          )
+                                        box(width = 12, DT::dataTableOutput(outputId = "dataTable2") %>% withSpinner(color="#0dc5c1"))
+                          #)
                           )
                 )
                 )
@@ -71,53 +85,27 @@ ui <-dashboardPage(
 
 server <- function(input, output, session) {
     
-    bikes <- readOGR("http://data.phl.opendata.arcgis.com/datasets/b5f660b9f0f44ced915995b6d49f6385_0.geojson")
-    #bikepalette <- colorFactor(palette() , levels = levels(bikes$TYPE))
-    
-    facilities <- readOGR("http://data.phl.opendata.arcgis.com/datasets/b3c133c3b15d4c96bcd4d5cc09f19f4e_0.geojson")
-    
     
     # bike lanes filtered data
     filteredBikes <- reactive({
-        bikes_data <- bikes
+        filtlane <- bikes
         
-        req(input$assettype)
-        # Boros
-        filtlane <- subset(bikes_data, ASSET_TYPE == input$lanetype)
+        req(input$lanetype)
         
-        # Sewer type
         if (length(input$lanetype) > 0) {
-            filtlane <- subset(filtlane, bikes_data %in% input$lanetype)
+            filtlane <- subset(filtlane, TYPE %in% input$lanetype)
         }
         
         return(filtlane)
     })
     
-    # This reactive expression represents the palette function,
-    # which changes as the user makes selections in UI.
+    # This reactive expression represents the palette function, which changes as the user makes bike lane selections in UI.
     colorpal <- reactive({
         colorNumeric(input$colors, bikes$TYPE)
     })
     
-    # Reactive expression for the data subsetted to what the user selected
-    filteredBikes <- reactive({
-        
-        req(input$lanetype)
-        
-        if(input$lanetype == "All") {
-            lanefilt <- quote(TYPE != "@?><")
-        } else {
-            lanefilt <- quote(TYPE == input$lanetype) 
-        }
-        
-        bikes@data %>%
-            filter_(lanefilt)
-        
-        #quakes[quakes$mag >= input$range[1] & quakes$mag <= input$range[2],]   
-    })
     
-    
-    # Facilities Filtered data
+    # Reactive expression for filtered facilities data
     filteredFacilities <- reactive({
         facilities_data <- facilities
         
@@ -135,12 +123,6 @@ server <- function(input, output, session) {
     
     View(class(filteredFacilities()))
     
-    # This reactive expression represents the palette function,
-    # which changes as the user makes selections in UI.
-    colorpal <- reactive({
-        colorNumeric(input$colors, bikes$TYPE)
-    })
-    
     
     output$map <- renderLeaflet({
 # Use leaflet() here, and only include aspects of the map that won't need to change dynamically (at least, not unless the entire map is being torn down and recreated).
@@ -156,8 +138,7 @@ server <- function(input, output, session) {
             #fitBounds(~min(long), ~min(lat), ~max(long), ~max(lat))
     })
     
-    # Incremental changes to the map (in this case, replacing the lines when a new bike lane type is chosen).
-    
+    # Incremental changes to the map (in this case, replacing the lines when a bike lane type is chosen).
     observeEvent(input$submit,{
         bikesfiltered <- filteredBikes()
         bikepalette <- colorFactor(palette() , levels = levels(bikesfiltered$TYPE))
@@ -168,40 +149,37 @@ server <- function(input, output, session) {
     })
     
     # # Replace layer with filtered philly publuc facilities
-    # observeEvent(input$submit,{
-    #     facilitiesFiltered <- filteredFacilities()
-    #     # Data is filtered facilities
-    #     leafletProxy("map", data = facilitiesFiltered@data) %>%
-    #         clearGroup(group = "Facilities") %>%
-    #         addMarkers(clusterOptions = markerClusterOptions(), data = facilitiesFiltered@data, group = "Facilities", label = facilities$ASSET_NAME)
-    # })
+    observeEvent(input$submit,{
+        facilitiesFiltered <- filteredFacilities()
+        # Data is filtered facilities
+        leafletProxy("map", data = facilitiesFiltered@data) %>%
+            clearGroup(group = "Facilities") %>%
+            addMarkers(clusterOptions = markerClusterOptions(), data = facilitiesFiltered@data, group = "Facilities", label = facilities$ASSET_NAME)
+    })
     
     # # Use a separate observer to recreate the bike lane legend as needed.
-    # observeEvent(input$submit,{
-    #     proxy <- leafletProxy("map", data = bikesfiltered())
-    # 
-    #     # Remove any existing legend, and only if the legend is
-    #     # enabled, create a new one.
-    #     proxy %>% 
-    #         clearControls()
-    #     if (input$legend) {
-    #         pal <- colorpal()
-    #         proxy %>% 
-    #             addLegend(position = "bottomright",
-    #                             pal = pal, values = ~TYPE
-    #         )
-    #     }
-    # })
+    observeEvent(input$submit,{
+        proxy <- leafletProxy("map", data = filteredBikes())
+
+        # Remove any existing legend, and only if the legend is
+        # enabled, create a new one.
+        proxy %>%
+            clearControls()
+        if (input$legend) {
+            pal <- colorpal()
+            proxy %>%
+                addLegend(position = "bottomright",
+                                pal = pal, values = ~TYPE
+            )
+        }
+    })
     
     # Create histogram object for Bike lane type count 
     output$plot1 <- renderPlotly({
         ggplotly(
-            ggplot(data = filteredBikes(), aes(TYPE))+
+            ggplot(data = filteredBikes()@data, aes(TYPE))+
                 geom_histogram(stat = "count") +
                 theme(axis.text.x = element_text(angle = 90))
-            # ggplot(data = bikes, aes_string(x = mtcars$wt, y = mtcars$mpg, color = mtcars$carb))
-            # +geom_point()
-            # +theme(axis.text.x = element_text(angle = 90))
         )
     })
     
@@ -211,9 +189,6 @@ server <- function(input, output, session) {
             ggplot(data = filteredFacilities()@data, aes(ASSET_GROUP1))+
                 geom_histogram(stat = "count") +
                 theme(axis.text.x = element_text(angle = 90))
-            # ggplot(data = mtcars, aes_string(x = mtcars$wt, y = mtcars$mpg, color = mtcars$carb))
-            # +geom_point()
-            # +theme(axis.text.x = element_text(angle = 90))
         )
     })
     
@@ -227,7 +202,9 @@ server <- function(input, output, session) {
                                           # Turn off search ----------------
                                           dom = "Btp",
                                           # Buttons available --------------
-                                          buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+                                          buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
+                                          scrollX = TRUE 
+                                              #'400px'
                           )
                           ,rownames = FALSE
             )  %>% 
@@ -259,7 +236,9 @@ server <- function(input, output, session) {
                                           # Turn off search ----------------
                                           dom = "Btp",
                                           # Buttons available --------------
-                                          buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+                                          buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
+                                          scrollX = TRUE
+                                          #scrollY = "400px"
                           )
                           ,rownames = FALSE
             )  %>% 
@@ -278,6 +257,24 @@ server <- function(input, output, session) {
                 backgroundSize = '90% 85%',
                 backgroundRepeat = 'no-repeat',
                 backgroundPosition = 'center')
+        }
+    )
+    
+    # Downloadable csv of selected bike dataset ----
+    output$downloadBikes <- downloadHandler(
+        filename = paste("Bikes_", as.character(input$selected_type), ".csv", sep = ""),
+        # modify to only pull for selected options
+        content = function(filename) {
+            write.csv(filteredBikes(), filename, row.names = FALSE)
+        }
+    )
+    
+    # Downloadable csv of selected facilities dataset ----
+    output$downloadFacilities <- downloadHandler(
+        filename = paste("Bikes_", as.character(input$selected_type), ".csv", sep = ""),
+        # modify to only pull for selected options
+        content = function(filename) {
+            write.csv(filteredFacilites(), filename, row.names = FALSE)
         }
     )
 }
