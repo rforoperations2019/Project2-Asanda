@@ -37,44 +37,50 @@ ui <-dashboardPage(
         sidebarMenu(
             selectInput(inputId = "lanetype",label =  "Bike Lane Type", choices = levels(bikes$TYPE), selected = "Conventional" ,multiple = T)
             , selectInput(inputId = "assettype",label =  "Facility Asset Type", choices = levels(facilities$ASSET_TYPE), selected = "Building" ,multiple = T)
-            ,selectInput("colors", "Color Scheme", rownames(subset(brewer.pal.info, category %in% c("seq", "div"))))
+            #color palette building options
+            #,selectInput("colors", "Color Scheme", rownames(subset(brewer.pal.info, category %in% c("seq", "div"))))
             ,actionButton("submit", label = "Submit")
-            # Button
+            # Download buttons for entire filtered data sets
             ,downloadButton("downloadBikes", "Download Bikes Data")
             ,br()
             ,downloadButton("downloadFacilities", "Download Facilites Data")
             ,checkboxInput("legend", "Show legend", TRUE)
             )
         )
+    
     ,dashboardBody( #width = 400, height = 400, 
         mainPanel(
             tabsetPanel(
                 tabPanel("Map of Philadelphia Public Resources"
                          ,leafletOutput("map"
                                         ,width="100%"
-                                        #,height="350px"
-                                        )
+                                        ) %>% 
+                             withSpinner(color="#0dc5c1")
                          )
                 ,tabPanel("Bikes"
-                          ,fluidRow(plotlyOutput("plot1") %>% withSpinner(color="#0dc5c1"))
+                          ,fluidRow(plotlyOutput("plot1") %>% 
+                                        withSpinner(color="#0dc5c1"))
                           ,fluidRow(checkboxInput(inputId = "show_data1"
                                                    ,label = "Show data table"
                                                    ,value = TRUE))
                           ,fluidRow(
                               #div(style = 'overflow-x: scroll'
                                         # Show data table ---------------------------------------------
-                                        box(width = 12, DT::dataTableOutput(outputId = "dataTable1") %>% withSpinner(color="#0dc5c1"))
+                                        box(width = 12, DT::dataTableOutput(outputId = "dataTable1") %>% 
+                                                withSpinner(color="#0dc5c1"))
                                         #)
                                     )
                           )
                 ,tabPanel("Facilities"
-                          , fluidRow(plotlyOutput("plot2") %>% withSpinner(color="#0dc5c1"))
+                          , fluidRow(plotlyOutput("plot2") %>% 
+                                         withSpinner(color="#0dc5c1"))
                           , fluidRow(checkboxInput(inputId = "show_data2"
                                                    ,label = "Show data table"
                                                    ,value = TRUE))
                           ,fluidRow(#div(style = 'overflow-x: scroll'
                                         # Show data table ---------------------------------------------
-                                        box(width = 12, DT::dataTableOutput(outputId = "dataTable2") %>% withSpinner(color="#0dc5c1"))
+                                        box(width = 12, DT::dataTableOutput(outputId = "dataTable2") %>% 
+                                                withSpinner(color="#0dc5c1"))
                           #)
                           )
                 )
@@ -97,11 +103,6 @@ server <- function(input, output, session) {
         }
         
         return(filtlane)
-    })
-    
-    # This reactive expression represents the palette function, which changes as the user makes bike lane selections in UI.
-    colorpal <- reactive({
-        colorNumeric(input$colors, bikes$TYPE)
     })
     
     
@@ -132,10 +133,7 @@ server <- function(input, output, session) {
             addProviderTiles(providers$Stamen.Terrain, group = 'Terrain') %>%
             addLayersControl(baseGroups = c("Street", "Terrain") 
                               ,overlayGroups = c("Bike Lanes", "Facilities")
-                              ,options = layersControlOptions(collapsed = FALSE)) #%>%
-            # addPolylines(data = filteredBikes(),color = ~colorpal()(TYPE), group = "Bike Lanes", weight = 3) %>%
-            # addLegend(position = "topright" , pal = colorpal(), values = bikes$TYPE, title = "Lane Type", group = "Bike Lanes)
-            #fitBounds(~min(long), ~min(lat), ~max(long), ~max(lat))
+                              ,options = layersControlOptions(collapsed = FALSE))
     })
     
     # Incremental changes to the map (in this case, replacing the lines when a bike lane type is chosen).
@@ -145,7 +143,23 @@ server <- function(input, output, session) {
 
         leafletProxy("map", data = bikesfiltered) %>%
             clearGroup(group = "Bike Lanes") %>%
-            addPolylines(data = bikesfiltered,  color = ~bikepalette(TYPE), group = "Bike Lanes")
+            addPolylines(data = bikesfiltered,  color = ~bikepalette(TYPE), group = "Bike Lanes") 
+            #clearControls() %>%
+            #addLegend(position = "bottomright", pal = bikepalette, values = ~TYPE, title = "Bike Lane Types", group = "Bike Lanes")
+    })
+    
+    # Add in dynamic legeneds
+    observe({        
+        bikesfiltered <- filteredBikes()
+        bikepalette <- colorFactor(palette() , levels = levels(bikesfiltered$TYPE))
+        
+        if(input$legend){
+    leafletProxy("map", data = bikesfiltered) %>%
+        clearControls() %>%
+        addLegend(position = "bottomright", pal = bikepalette, values = ~TYPE, title = "Bike Lane Types", group = "Bike Lanes")
+        }
+        else{leafletProxy("map", data = bikesfiltered) %>%
+                clearControls()}
     })
     
     # # Replace layer with filtered philly publuc facilities
@@ -155,23 +169,6 @@ server <- function(input, output, session) {
         leafletProxy("map", data = facilitiesFiltered@data) %>%
             clearGroup(group = "Facilities") %>%
             addMarkers(clusterOptions = markerClusterOptions(), data = facilitiesFiltered@data, group = "Facilities", label = facilities$ASSET_NAME)
-    })
-    
-    # # Use a separate observer to recreate the bike lane legend as needed.
-    observeEvent(input$submit,{
-        proxy <- leafletProxy("map", data = filteredBikes())
-
-        # Remove any existing legend, and only if the legend is
-        # enabled, create a new one.
-        proxy %>%
-            clearControls()
-        if (input$legend) {
-            pal <- colorpal()
-            proxy %>%
-                addLegend(position = "bottomright",
-                                pal = pal, values = ~TYPE
-            )
-        }
     })
     
     # Create histogram object for Bike lane type count 
