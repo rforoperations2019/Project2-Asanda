@@ -54,8 +54,7 @@ ui <-dashboardPage(
                 tabPanel("Map of Philadelphia Public Resources"
                          ,leafletOutput("map"
                                         ,width="100%"
-                                        ) %>% 
-                             withSpinner(color="#0dc5c1")
+                                        )
                          )
                 ,tabPanel("Bikes"
                           ,fluidRow(plotlyOutput("plot1") %>% 
@@ -122,7 +121,7 @@ server <- function(input, output, session) {
         return(filtfac)
     })
     
-    View(class(filteredFacilities()))
+    #View(class(filteredFacilities()))
     
     
     output$map <- renderLeaflet({
@@ -144,12 +143,10 @@ server <- function(input, output, session) {
         leafletProxy("map", data = bikesfiltered) %>%
             clearGroup(group = "Bike Lanes") %>%
             addPolylines(data = bikesfiltered,  color = ~bikepalette(TYPE), group = "Bike Lanes") 
-            #clearControls() %>%
-            #addLegend(position = "bottomright", pal = bikepalette, values = ~TYPE, title = "Bike Lane Types", group = "Bike Lanes")
     })
     
-    # Add in dynamic legeneds
-    observe({        
+    # Add in dynamic legends
+    observeEvent(input$submit,{    
         bikesfiltered <- filteredBikes()
         bikepalette <- colorFactor(palette() , levels = levels(bikesfiltered$TYPE))
         
@@ -162,7 +159,7 @@ server <- function(input, output, session) {
                 clearControls()}
     })
     
-    # # Replace layer with filtered philly publuc facilities
+    # # Replace layer with filtered philly public facilities
     observeEvent(input$submit,{
         facilitiesFiltered <- filteredFacilities()
         # Data is filtered facilities
